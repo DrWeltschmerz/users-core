@@ -25,6 +25,11 @@ func (s *Service) Register(ctx context.Context, input UserRegisterInput) (*User,
 		return nil, err
 	}
 
+	existing, err := s.userRepo.GetByEmail(ctx, input.Email)
+	if err == nil && existing != nil {
+		return nil, ErrEmailTaken
+	}
+
 	role, err := s.roleRepo.GetByName(ctx, RoleUser)
 	if err != nil {
 		role, err = s.roleRepo.Create(ctx, Role{Name: RoleUser})
