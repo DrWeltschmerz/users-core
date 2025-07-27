@@ -1,0 +1,528 @@
+package users
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+// --- Mock Implementations ---
+
+type mockUserRepo struct {
+	users                                            map[string]*User
+	createErr, getErr, updateErr, deleteErr, listErr error
+}
+
+func (m *mockUserRepo) Create(u User) (*User, error) {
+	if m.createErr != nil {
+		return nil, m.createErr
+	}
+	m.users[u.Email] = &u
+	return &u, nil
+}
+func (m *mockUserRepo) GetByEmail(email string) (*User, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	u, ok := m.users[email]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	return u, nil
+}
+func (m *mockUserRepo) GetByID(id string) (*User, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	for _, u := range m.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return nil, ErrUserNotFound
+}
+func (m *mockUserRepo) Update(u User) (*User, error) {
+	if m.updateErr != nil {
+		return nil, m.updateErr
+	}
+	m.users[u.Email] = &u
+	return &u, nil
+}
+func (m *mockUserRepo) List() ([]User, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	var us []User
+	for _, u := range m.users {
+		us = append(us, *u)
+	}
+	return us, nil
+}
+func (m *mockUserRepo) Delete(id string) error {
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	for k, u := range m.users {
+		if u.ID == id {
+			delete(m.users, k)
+			return nil
+		}
+	}
+	return ErrUserNotFound
+}
+
+func (m *mockUserRepo) GetByUsername(username string) (*User, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	for _, u := range m.users {
+		if u.Username == username {
+			return u, nil
+		}
+	}
+	return nil, ErrUserNotFound
+}
+
+type mockRoleRepo struct {
+	roles                                    map[string]*Role
+	getByNameErr, createErr, getErr, listErr error
+}
+
+// Update implements RoleRepository.
+func (m *mockRoleRepo) Update(role Role) (*Role, error) {
+	panic("unimplemented")
+}
+
+func (m *mockRoleRepo) GetByName(name string) (*Role, error) {
+	if m.getByNameErr != nil {
+		return nil, m.getByNameErr
+	}
+	for _, r := range m.roles {
+		if r.Name == name {
+			return r, nil
+		}
+	}
+	return nil, ErrRoleNotFound
+}
+func (m *mockRoleRepo) Create(r Role) (*Role, error) {
+	if m.createErr != nil {
+		return nil, m.createErr
+	}
+	m.roles[r.Name] = &r
+	return &r, nil
+}
+func (m *mockRoleRepo) GetByID(id string) (*Role, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	for _, r := range m.roles {
+		if r.ID == id {
+			return r, nil
+		}
+	}
+	return nil, ErrRoleNotFound
+}
+func (m *mockRoleRepo) List() ([]Role, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	var rs []Role
+	for _, r := range m.roles {
+		rs = append(rs, *r)
+	}
+	return rs, nil
+}
+
+func (m *mockRoleRepo) Delete(id string) error {
+	for k, r := range m.roles {
+		if r.ID == id {
+			delete(m.roles, k)
+			return nil
+		}
+	}
+	return ErrRoleNotFound
+}
+
+type mockHasher struct {
+	hashErr, verifyErr error
+}
+
+func (m *mockHasher) Hash(pw string) (string, error) {
+	if m.hashErr != nil {
+		return "", m.hashErr
+	}
+	return "hashed:" + pw, nil
+}
+func (m *mockHasher) Verify(hashed, pw string) bool {
+	if m.verifyErr != nil {
+		return false
+	}
+	return hashed == "hashed:"+pw
+}
+
+// --- Test Data ---
+
+var (
+	testUser = &User{
+		ID:             "u1",
+		Email:          "test@example.com",
+		Username:       "testuser",
+		HashedPassword: "hashed:password",
+		RoleID:         "r1",
+		LastSeen:       time.Now(),
+	}
+	testRole = &Role{
+		ID:   "r2",
+		Name: "admin",
+	}
+)
+
+// --- Tests ---
+
+func TestAssignRoleToUser(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	roleRepo := &mockRoleRepo{roles: map[string]*Role{"admin": testRole}}
+	svc := NewService(userRepo, roleRepo, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		u, err := svc.AssignRoleToUser(ctx, "u1", "r2")
+		require.NoError(t, err)
+		require.Equal(t, "r2", u.RoleID)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		_, err := svc.AssignRoleToUser(ctx, "notfound", "r2")
+		require.ErrorIs(t, err, ErrUserNotFound)
+	})
+
+	t.Run("role not found", func(t *testing.T) {
+		_, err := svc.AssignRoleToUser(ctx, "u1", "notfound")
+		require.ErrorIs(t, err, ErrRoleNotFound)
+	})
+
+	t.Run("update fails", func(t *testing.T) {
+		userRepo.updateErr = errors.New("fail")
+		_, err := svc.AssignRoleToUser(ctx, "u1", "r2")
+		require.ErrorIs(t, err, ErrFailedToUpdateUser)
+		userRepo.updateErr = nil
+	})
+}
+
+func TestRegister(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{}}
+	roleRepo := &mockRoleRepo{roles: map[string]*Role{"user": {ID: "r1", Name: RoleUser}}}
+	svc := NewService(userRepo, roleRepo, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		input := UserRegisterInput{Email: "a@b.com", Username: "a", Password: "pw"}
+		u, err := svc.Register(ctx, input)
+		require.NoError(t, err)
+		require.Equal(t, "a@b.com", u.Email)
+	})
+
+	t.Run("hash error", func(t *testing.T) {
+		svc := NewService(userRepo, roleRepo, &mockHasher{hashErr: errors.New("fail")})
+		_, err := svc.Register(ctx, UserRegisterInput{Email: "x", Username: "x", Password: "x"})
+		require.Error(t, err)
+	})
+
+	t.Run("role create fallback", func(t *testing.T) {
+		roleRepo := &mockRoleRepo{
+			roles:        map[string]*Role{},
+			getByNameErr: errors.New("not found"),
+			createErr:    errors.New("fail"),
+		}
+		svc := NewService(userRepo, roleRepo, &mockHasher{})
+		input := UserRegisterInput{Email: "b@b.com", Username: "b", Password: "pw"}
+		_, err := svc.Register(ctx, input)
+		require.ErrorIs(t, err, ErrFailedToCreateRole)
+	})
+}
+
+func TestLogin(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		u, err := svc.Login(ctx, UserLoginInput{Email: "test@example.com", Password: "password"})
+		require.NoError(t, err)
+		require.Equal(t, testUser.Email, u.Email)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		_, err := svc.Login(ctx, UserLoginInput{Email: "notfound", Password: "pw"})
+		require.ErrorIs(t, err, ErrUserNotFound)
+	})
+
+	t.Run("invalid credentials", func(t *testing.T) {
+		_, err := svc.Login(ctx, UserLoginInput{Email: "test@example.com", Password: "wrong"})
+		require.ErrorIs(t, err, ErrInvalidCredentials)
+	})
+}
+
+func TestGetUserByID(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		u, err := svc.GetUserByID(ctx, "u1")
+		require.NoError(t, err)
+		require.Equal(t, "u1", u.ID)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		_, err := svc.GetUserByID(ctx, "notfound")
+		require.ErrorIs(t, err, ErrUserNotFound)
+	})
+}
+
+func TestUpdateUser(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		u, err := svc.UpdateUser(ctx, *testUser)
+		require.NoError(t, err)
+		require.Equal(t, testUser.ID, u.ID)
+	})
+
+	t.Run("fail", func(t *testing.T) {
+		userRepo.updateErr = errors.New("fail")
+		_, err := svc.UpdateUser(ctx, *testUser)
+		require.ErrorIs(t, err, ErrFailedToUpdateUser)
+		userRepo.updateErr = nil
+	})
+}
+
+func TestListUsers(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		us, err := svc.ListUsers(ctx)
+		require.NoError(t, err)
+		require.Len(t, us, 1)
+	})
+
+	t.Run("fail", func(t *testing.T) {
+		userRepo.listErr = errors.New("fail")
+		_, err := svc.ListUsers(ctx)
+		require.ErrorIs(t, err, ErrFailedToListUsers)
+		userRepo.listErr = nil
+	})
+}
+
+func TestDeleteUser(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		err := svc.DeleteUser(ctx, "u1")
+		require.NoError(t, err)
+	})
+
+	t.Run("fail", func(t *testing.T) {
+		userRepo.deleteErr = errors.New("fail")
+		err := svc.DeleteUser(ctx, "u1")
+		require.ErrorIs(t, err, ErrFailedToDeleteUser)
+		userRepo.deleteErr = nil
+	})
+}
+
+func TestGetRoleByID(t *testing.T) {
+	ctx := context.Background()
+	roleRepo := &mockRoleRepo{roles: map[string]*Role{"admin": testRole}}
+	svc := NewService(&mockUserRepo{}, roleRepo, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		r, err := svc.GetRoleByID(ctx, "r2")
+		require.NoError(t, err)
+		require.Equal(t, "r2", r.ID)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		_, err := svc.GetRoleByID(ctx, "notfound")
+		require.ErrorIs(t, err, ErrRoleNotFound)
+	})
+}
+
+func TestCreateRole(t *testing.T) {
+	ctx := context.Background()
+	roleRepo := &mockRoleRepo{roles: map[string]*Role{}}
+	svc := NewService(&mockUserRepo{}, roleRepo, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		r, err := svc.CreateRole(ctx, Role{ID: "r3", Name: "user"})
+		require.NoError(t, err)
+		require.Equal(t, "user", r.Name)
+	})
+
+	t.Run("fail", func(t *testing.T) {
+		roleRepo.createErr = errors.New("fail")
+		_, err := svc.CreateRole(ctx, Role{ID: "r4", Name: "fail"})
+		require.ErrorIs(t, err, ErrFailedToCreateRole)
+		roleRepo.createErr = nil
+	})
+}
+
+func TestListRoles(t *testing.T) {
+	ctx := context.Background()
+	roleRepo := &mockRoleRepo{roles: map[string]*Role{"admin": testRole}}
+	svc := NewService(&mockUserRepo{}, roleRepo, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		rs, err := svc.ListRoles(ctx)
+		require.NoError(t, err)
+		require.Len(t, rs, 1)
+	})
+
+	t.Run("fail", func(t *testing.T) {
+		roleRepo.listErr = errors.New("fail")
+		_, err := svc.ListRoles(ctx)
+		require.ErrorIs(t, err, ErrFailedToListUsers)
+		roleRepo.listErr = nil
+	})
+}
+
+func TestIsAdmin(t *testing.T) {
+	roleRepo := &mockRoleRepo{roles: map[string]*Role{"admin": {ID: "r2", Name: RoleAdmin}}}
+	svc := NewService(&mockUserRepo{}, roleRepo, &mockHasher{})
+
+	t.Run("is admin", func(t *testing.T) {
+		u := &User{RoleID: "r2"}
+		require.True(t, svc.IsAdmin(u))
+	})
+
+	t.Run("not admin", func(t *testing.T) {
+		u := &User{RoleID: "notadmin"}
+		require.False(t, svc.IsAdmin(u))
+	})
+
+	t.Run("no role id", func(t *testing.T) {
+		u := &User{}
+		require.False(t, svc.IsAdmin(u))
+	})
+}
+
+func TestUpdateLastSeen(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		err := svc.UpdateLastSeen(ctx, "u1")
+		require.NoError(t, err)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		err := svc.UpdateLastSeen(ctx, "notfound")
+		require.ErrorIs(t, err, ErrUserNotFound)
+	})
+
+	t.Run("update fails", func(t *testing.T) {
+		userRepo.updateErr = errors.New("fail")
+		err := svc.UpdateLastSeen(ctx, "u1")
+		require.ErrorIs(t, err, ErrFailedToUpdateUser)
+		userRepo.updateErr = nil
+	})
+}
+
+func TestChangePassword(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		u, err := svc.ChangePassword(ctx, "u1", "password", "newpw")
+		require.NoError(t, err)
+		require.Equal(t, "hashed:newpw", u.HashedPassword)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		_, err := svc.ChangePassword(ctx, "notfound", "x", "y")
+		require.ErrorIs(t, err, ErrUserNotFound)
+	})
+
+	t.Run("same password", func(t *testing.T) {
+		_, err := svc.ChangePassword(ctx, "u1", "password", "password")
+		require.ErrorIs(t, err, ErrCannotUseSamePassword)
+	})
+
+	t.Run("wrong old password", func(t *testing.T) {
+		_, err := svc.ChangePassword(ctx, "u1", "wrong", "newpw")
+		require.ErrorIs(t, err, ErrInvalidCredentials)
+	})
+
+	t.Run("hash error", func(t *testing.T) {
+		userRepo := &mockUserRepo{users: map[string]*User{
+			"test@example.com": {
+				ID:             "u1",
+				Email:          "test@example.com",
+				Username:       "testuser",
+				HashedPassword: "hashed:password",
+				RoleID:         "r1",
+				LastSeen:       time.Now(),
+			},
+		}}
+		svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{hashErr: errors.New("fail")})
+		_, err := svc.ChangePassword(ctx, "u1", "password", "newpw")
+		require.ErrorIs(t, err, ErrFailedToHashPassword)
+	})
+
+	t.Run("update fails", func(t *testing.T) {
+		userRepo := &mockUserRepo{users: map[string]*User{
+			"test@example.com": {
+				ID:             "u1",
+				Email:          "test@example.com",
+				Username:       "testuser",
+				HashedPassword: "hashed:password",
+				RoleID:         "r1",
+				LastSeen:       time.Now(),
+			},
+		}, updateErr: errors.New("fail")}
+		svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+		_, err := svc.ChangePassword(ctx, "u1", "password", "newpw")
+		require.ErrorIs(t, err, ErrFailedToUpdateUser)
+		userRepo.updateErr = nil
+	})
+}
+
+func TestResetPassword(t *testing.T) {
+	ctx := context.Background()
+	userRepo := &mockUserRepo{users: map[string]*User{"test@example.com": testUser}}
+	svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{})
+
+	t.Run("success", func(t *testing.T) {
+		u, err := svc.ResetPassword(ctx, "u1", "resetpw")
+		require.NoError(t, err)
+		require.Equal(t, "hashed:resetpw", u.HashedPassword)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		_, err := svc.ResetPassword(ctx, "notfound", "pw")
+		require.ErrorIs(t, err, ErrUserNotFound)
+	})
+
+	t.Run("hash error", func(t *testing.T) {
+		svc := NewService(userRepo, &mockRoleRepo{}, &mockHasher{hashErr: errors.New("fail")})
+		_, err := svc.ResetPassword(ctx, "u1", "pw")
+		require.ErrorIs(t, err, ErrFailedToHashPassword)
+	})
+
+	t.Run("update fails", func(t *testing.T) {
+		userRepo.updateErr = errors.New("fail")
+		_, err := svc.ResetPassword(ctx, "u1", "pw")
+		require.ErrorIs(t, err, ErrFailedToUpdateUser)
+		userRepo.updateErr = nil
+	})
+}
