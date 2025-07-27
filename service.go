@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -24,7 +25,7 @@ func NewService(userRepo UserRepository, roleRepo RoleRepository, hasher Passwor
 func (s *Service) Register(ctx context.Context, input UserRegisterInput) (*User, error) {
 	hashedPassword, err := s.hasher.Hash(input.Password)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
 	existing, err := s.userRepo.GetByEmail(ctx, input.Email)
@@ -36,7 +37,7 @@ func (s *Service) Register(ctx context.Context, input UserRegisterInput) (*User,
 	if err != nil {
 		role, err = s.roleRepo.Create(ctx, Role{Name: RoleUser})
 		if err != nil {
-			return nil, ErrFailedToCreateRole
+			return nil, fmt.Errorf("%w: %v", ErrFailedToCreateRole, err)
 		}
 	}
 
@@ -50,13 +51,13 @@ func (s *Service) Register(ctx context.Context, input UserRegisterInput) (*User,
 
 	createdUser, err := s.userRepo.Create(ctx, user)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	return createdUser, nil
 }
 
-func (s *Service) Login(ctx context.Context, input UserLoginInput) (string, error) {
+func (s *Service) Login(ctx context.Context, input UserLoginInput) (token string, err error) {
 	user, err := s.userRepo.GetByEmail(ctx, input.Email)
 	if err != nil {
 		return "", ErrUserNotFound
@@ -65,10 +66,9 @@ func (s *Service) Login(ctx context.Context, input UserLoginInput) (string, erro
 		return "", ErrInvalidCredentials
 	}
 
-	token, err := s.tokenizer.GenerateToken(user.Email, user.ID)
-
+	token, err = s.tokenizer.GenerateToken(user.Email, user.ID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate token: %w", err)
 	}
 
 	return token, nil
@@ -85,7 +85,7 @@ func (s *Service) GetUserByID(ctx context.Context, id string) (*User, error) {
 func (s *Service) UpdateUser(ctx context.Context, user User) (*User, error) {
 	updatedUser, err := s.userRepo.Update(ctx, user)
 	if err != nil {
-		return nil, ErrFailedToUpdateUser
+		return nil, fmt.Errorf("%w: %v", ErrFailedToUpdateUser, err)
 	}
 	return updatedUser, nil
 }
@@ -93,7 +93,7 @@ func (s *Service) UpdateUser(ctx context.Context, user User) (*User, error) {
 func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 	users, err := s.userRepo.List(ctx)
 	if err != nil {
-		return nil, ErrFailedToListUsers
+		return nil, fmt.Errorf("%w: %v", ErrFailedToListUsers, err)
 	}
 	return users, nil
 }
@@ -101,7 +101,7 @@ func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 func (s *Service) DeleteUser(ctx context.Context, id string) error {
 	err := s.userRepo.Delete(ctx, id)
 	if err != nil {
-		return ErrFailedToDeleteUser
+		return fmt.Errorf("%w: %v", ErrFailedToDeleteUser, err)
 	}
 	return nil
 }
@@ -117,7 +117,7 @@ func (s *Service) GetRoleByID(ctx context.Context, id string) (*Role, error) {
 func (s *Service) CreateRole(ctx context.Context, role Role) (*Role, error) {
 	createdRole, err := s.roleRepo.Create(ctx, role)
 	if err != nil {
-		return nil, ErrFailedToCreateRole
+		return nil, fmt.Errorf("%w: %v", ErrFailedToCreateRole, err)
 	}
 	return createdRole, nil
 }
@@ -136,7 +136,7 @@ func (s *Service) AssignRoleToUser(ctx context.Context, userID, roleID string) (
 	user.RoleID = role.ID
 	updatedUser, err := s.userRepo.Update(ctx, *user)
 	if err != nil {
-		return nil, ErrFailedToUpdateUser
+		return nil, fmt.Errorf("%w: %v", ErrFailedToUpdateUser, err)
 	}
 
 	return updatedUser, nil
@@ -145,7 +145,7 @@ func (s *Service) AssignRoleToUser(ctx context.Context, userID, roleID string) (
 func (s *Service) ListRoles(ctx context.Context) ([]Role, error) {
 	roles, err := s.roleRepo.List(ctx)
 	if err != nil {
-		return nil, ErrFailedToListUsers
+		return nil, fmt.Errorf("%w: %v", ErrFailedToListUsers, err)
 	}
 	return roles, nil
 }
@@ -154,7 +154,6 @@ func (s *Service) IsAdmin(user *User) bool {
 	if user.RoleID == "" {
 		return false
 	}
-	// IsAdmin nie ma contextu, więc nie zmieniamy sygnatury
 	role, err := s.roleRepo.GetByID(context.Background(), user.RoleID)
 	if err != nil {
 		return false
@@ -171,7 +170,7 @@ func (s *Service) UpdateLastSeen(ctx context.Context, userID string) error {
 	user.LastSeen = time.Now()
 	_, err = s.userRepo.Update(ctx, *user)
 	if err != nil {
-		return ErrFailedToUpdateUser
+		return fmt.Errorf("%w: %v", ErrFailedToUpdateUser, err)
 	}
 
 	return nil
@@ -193,13 +192,13 @@ func (s *Service) ChangePassword(ctx context.Context, userID, oldPassword, newPa
 
 	hashedNewPassword, err := s.hasher.Hash(newPassword)
 	if err != nil {
-		return nil, ErrFailedToHashPassword
+		return nil, fmt.Errorf("%w: %v", ErrFailedToHashPassword, err)
 	}
 
 	user.HashedPassword = hashedNewPassword
 	updatedUser, err := s.userRepo.Update(ctx, *user)
 	if err != nil {
-		return nil, ErrFailedToUpdateUser
+		return nil, fmt.Errorf("%w: %v", ErrFailedToUpdateUser, err)
 	}
 
 	return updatedUser, nil
@@ -213,13 +212,13 @@ func (s *Service) ResetPassword(ctx context.Context, userID, newPassword string)
 
 	hashedPassword, err := s.hasher.Hash(newPassword)
 	if err != nil {
-		return nil, ErrFailedToHashPassword
+		return nil, fmt.Errorf("%w: %v", ErrFailedToHashPassword, err)
 	}
 
 	user.HashedPassword = hashedPassword
 	updatedUser, err := s.userRepo.Update(ctx, *user)
 	if err != nil {
-		return nil, ErrFailedToUpdateUser
+		return nil, fmt.Errorf("%w: %v", ErrFailedToUpdateUser, err)
 	}
 
 	return updatedUser, nil
