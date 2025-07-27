@@ -6,16 +6,18 @@ import (
 )
 
 type Service struct {
-	userRepo UserRepository
-	roleRepo RoleRepository
-	hasher   PasswordHasher
+	userRepo  UserRepository
+	roleRepo  RoleRepository
+	hasher    PasswordHasher
+	tokenizer Tokenizer
 }
 
-func NewService(userRepo UserRepository, roleRepo RoleRepository, hasher PasswordHasher) *Service {
+func NewService(userRepo UserRepository, roleRepo RoleRepository, hasher PasswordHasher, tokenizer Tokenizer) *Service {
 	return &Service{
-		userRepo: userRepo,
-		roleRepo: roleRepo,
-		hasher:   hasher,
+		userRepo:  userRepo,
+		roleRepo:  roleRepo,
+		hasher:    hasher,
+		tokenizer: tokenizer,
 	}
 }
 
@@ -54,16 +56,22 @@ func (s *Service) Register(ctx context.Context, input UserRegisterInput) (*User,
 	return createdUser, nil
 }
 
-func (s *Service) Login(ctx context.Context, input UserLoginInput) (*User, error) {
+func (s *Service) Login(ctx context.Context, input UserLoginInput) (string, error) {
 	user, err := s.userRepo.GetByEmail(ctx, input.Email)
 	if err != nil {
-		return nil, ErrUserNotFound
+		return "", ErrUserNotFound
 	}
 	if !s.hasher.Verify(user.HashedPassword, input.Password) {
-		return nil, ErrInvalidCredentials
+		return "", ErrInvalidCredentials
 	}
 
-	return user, nil
+	token, err := s.tokenizer.GenerateToken(user.Email, user.ID)
+
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
 }
 
 func (s *Service) GetUserByID(ctx context.Context, id string) (*User, error) {
