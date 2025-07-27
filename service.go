@@ -25,9 +25,9 @@ func (s *Service) Register(ctx context.Context, input UserRegisterInput) (*User,
 		return nil, err
 	}
 
-	role, err := s.roleRepo.GetByName(RoleUser)
+	role, err := s.roleRepo.GetByName(ctx, RoleUser)
 	if err != nil {
-		role, err = s.roleRepo.Create(Role{Name: RoleUser})
+		role, err = s.roleRepo.Create(ctx, Role{Name: RoleUser})
 		if err != nil {
 			return nil, ErrFailedToCreateRole
 		}
@@ -41,7 +41,7 @@ func (s *Service) Register(ctx context.Context, input UserRegisterInput) (*User,
 		RoleID:         role.ID,
 	}
 
-	createdUser, err := s.userRepo.Create(user)
+	createdUser, err := s.userRepo.Create(ctx, user)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (s *Service) Register(ctx context.Context, input UserRegisterInput) (*User,
 }
 
 func (s *Service) Login(ctx context.Context, input UserLoginInput) (*User, error) {
-	user, err := s.userRepo.GetByEmail(input.Email)
+	user, err := s.userRepo.GetByEmail(ctx, input.Email)
 	if err != nil {
 		return nil, ErrUserNotFound
 	}
@@ -62,7 +62,7 @@ func (s *Service) Login(ctx context.Context, input UserLoginInput) (*User, error
 }
 
 func (s *Service) GetUserByID(ctx context.Context, id string) (*User, error) {
-	user, err := s.userRepo.GetByID(id)
+	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, ErrUserNotFound
 	}
@@ -70,7 +70,7 @@ func (s *Service) GetUserByID(ctx context.Context, id string) (*User, error) {
 }
 
 func (s *Service) UpdateUser(ctx context.Context, user User) (*User, error) {
-	updatedUser, err := s.userRepo.Update(user)
+	updatedUser, err := s.userRepo.Update(ctx, user)
 	if err != nil {
 		return nil, ErrFailedToUpdateUser
 	}
@@ -78,7 +78,7 @@ func (s *Service) UpdateUser(ctx context.Context, user User) (*User, error) {
 }
 
 func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
-	users, err := s.userRepo.List()
+	users, err := s.userRepo.List(ctx)
 	if err != nil {
 		return nil, ErrFailedToListUsers
 	}
@@ -86,7 +86,7 @@ func (s *Service) ListUsers(ctx context.Context) ([]User, error) {
 }
 
 func (s *Service) DeleteUser(ctx context.Context, id string) error {
-	err := s.userRepo.Delete(id)
+	err := s.userRepo.Delete(ctx, id)
 	if err != nil {
 		return ErrFailedToDeleteUser
 	}
@@ -94,7 +94,7 @@ func (s *Service) DeleteUser(ctx context.Context, id string) error {
 }
 
 func (s *Service) GetRoleByID(ctx context.Context, id string) (*Role, error) {
-	role, err := s.roleRepo.GetByID(id)
+	role, err := s.roleRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, ErrRoleNotFound
 	}
@@ -102,7 +102,7 @@ func (s *Service) GetRoleByID(ctx context.Context, id string) (*Role, error) {
 }
 
 func (s *Service) CreateRole(ctx context.Context, role Role) (*Role, error) {
-	createdRole, err := s.roleRepo.Create(role)
+	createdRole, err := s.roleRepo.Create(ctx, role)
 	if err != nil {
 		return nil, ErrFailedToCreateRole
 	}
@@ -110,18 +110,18 @@ func (s *Service) CreateRole(ctx context.Context, role Role) (*Role, error) {
 }
 
 func (s *Service) AssignRoleToUser(ctx context.Context, userID, roleID string) (*User, error) {
-	user, err := s.userRepo.GetByID(userID)
+	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, ErrUserNotFound
 	}
 
-	role, err := s.roleRepo.GetByID(roleID)
+	role, err := s.roleRepo.GetByID(ctx, roleID)
 	if err != nil {
 		return nil, ErrRoleNotFound
 	}
 
 	user.RoleID = role.ID
-	updatedUser, err := s.userRepo.Update(*user)
+	updatedUser, err := s.userRepo.Update(ctx, *user)
 	if err != nil {
 		return nil, ErrFailedToUpdateUser
 	}
@@ -130,7 +130,7 @@ func (s *Service) AssignRoleToUser(ctx context.Context, userID, roleID string) (
 }
 
 func (s *Service) ListRoles(ctx context.Context) ([]Role, error) {
-	roles, err := s.roleRepo.List()
+	roles, err := s.roleRepo.List(ctx)
 	if err != nil {
 		return nil, ErrFailedToListUsers
 	}
@@ -141,7 +141,8 @@ func (s *Service) IsAdmin(user *User) bool {
 	if user.RoleID == "" {
 		return false
 	}
-	role, err := s.roleRepo.GetByID(user.RoleID)
+	// IsAdmin nie ma contextu, więc nie zmieniamy sygnatury
+	role, err := s.roleRepo.GetByID(context.Background(), user.RoleID)
 	if err != nil {
 		return false
 	}
@@ -149,13 +150,13 @@ func (s *Service) IsAdmin(user *User) bool {
 }
 
 func (s *Service) UpdateLastSeen(ctx context.Context, userID string) error {
-	user, err := s.userRepo.GetByID(userID)
+	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return ErrUserNotFound
 	}
 
 	user.LastSeen = time.Now()
-	_, err = s.userRepo.Update(*user)
+	_, err = s.userRepo.Update(ctx, *user)
 	if err != nil {
 		return ErrFailedToUpdateUser
 	}
@@ -164,7 +165,7 @@ func (s *Service) UpdateLastSeen(ctx context.Context, userID string) error {
 }
 
 func (s *Service) ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) (*User, error) {
-	user, err := s.userRepo.GetByID(userID)
+	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, ErrUserNotFound
 	}
@@ -183,7 +184,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID, oldPassword, newPa
 	}
 
 	user.HashedPassword = hashedNewPassword
-	updatedUser, err := s.userRepo.Update(*user)
+	updatedUser, err := s.userRepo.Update(ctx, *user)
 	if err != nil {
 		return nil, ErrFailedToUpdateUser
 	}
@@ -192,7 +193,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID, oldPassword, newPa
 }
 
 func (s *Service) ResetPassword(ctx context.Context, userID, newPassword string) (*User, error) {
-	user, err := s.userRepo.GetByID(userID)
+	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, ErrUserNotFound
 	}
@@ -203,7 +204,7 @@ func (s *Service) ResetPassword(ctx context.Context, userID, newPassword string)
 	}
 
 	user.HashedPassword = hashedPassword
-	updatedUser, err := s.userRepo.Update(*user)
+	updatedUser, err := s.userRepo.Update(ctx, *user)
 	if err != nil {
 		return nil, ErrFailedToUpdateUser
 	}

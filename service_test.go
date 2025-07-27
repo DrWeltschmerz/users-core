@@ -16,42 +16,42 @@ type mockUserRepo struct {
 	createErr, getErr, updateErr, deleteErr, listErr error
 }
 
-func (m *mockUserRepo) Create(u User) (*User, error) {
+func (m *mockUserRepo) Create(ctx context.Context, u User) (*User, error) {
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
-	m.users[u.Email] = &u
+	m.users[u.ID] = &u
 	return &u, nil
 }
-func (m *mockUserRepo) GetByEmail(email string) (*User, error) {
-	if m.getErr != nil {
-		return nil, m.getErr
-	}
-	u, ok := m.users[email]
-	if !ok {
-		return nil, ErrUserNotFound
-	}
-	return u, nil
-}
-func (m *mockUserRepo) GetByID(id string) (*User, error) {
+func (m *mockUserRepo) GetByEmail(ctx context.Context, email string) (*User, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
 	for _, u := range m.users {
-		if u.ID == id {
+		if u.Email == email {
 			return u, nil
 		}
 	}
 	return nil, ErrUserNotFound
 }
-func (m *mockUserRepo) Update(u User) (*User, error) {
+func (m *mockUserRepo) GetByID(ctx context.Context, id string) (*User, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	u, ok := m.users[id]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	return u, nil
+}
+func (m *mockUserRepo) Update(ctx context.Context, u User) (*User, error) {
 	if m.updateErr != nil {
 		return nil, m.updateErr
 	}
-	m.users[u.Email] = &u
+	m.users[u.ID] = &u
 	return &u, nil
 }
-func (m *mockUserRepo) List() ([]User, error) {
+func (m *mockUserRepo) List(ctx context.Context) ([]User, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -61,23 +61,14 @@ func (m *mockUserRepo) List() ([]User, error) {
 	}
 	return us, nil
 }
-func (m *mockUserRepo) Delete(id string) error {
+func (m *mockUserRepo) Delete(ctx context.Context, id string) error {
 	if m.deleteErr != nil {
 		return m.deleteErr
 	}
-	for k, u := range m.users {
-		if u.ID == id {
-			delete(m.users, k)
-			return nil
-		}
-	}
-	return ErrUserNotFound
+	delete(m.users, id)
+	return nil
 }
-
-func (m *mockUserRepo) GetByUsername(username string) (*User, error) {
-	if m.getErr != nil {
-		return nil, m.getErr
-	}
+func (m *mockUserRepo) GetByUsername(ctx context.Context, username string) (*User, error) {
 	for _, u := range m.users {
 		if u.Username == username {
 			return u, nil
@@ -91,12 +82,14 @@ type mockRoleRepo struct {
 	getByNameErr, createErr, getErr, listErr error
 }
 
-// Update implements RoleRepository.
-func (m *mockRoleRepo) Update(role Role) (*Role, error) {
-	panic("unimplemented")
+func (m *mockRoleRepo) Update(ctx context.Context, role Role) (*Role, error) {
+	if m.createErr != nil {
+		return nil, m.createErr
+	}
+	m.roles[role.ID] = &role
+	return &role, nil
 }
-
-func (m *mockRoleRepo) GetByName(name string) (*Role, error) {
+func (m *mockRoleRepo) GetByName(ctx context.Context, name string) (*Role, error) {
 	if m.getByNameErr != nil {
 		return nil, m.getByNameErr
 	}
@@ -107,25 +100,24 @@ func (m *mockRoleRepo) GetByName(name string) (*Role, error) {
 	}
 	return nil, ErrRoleNotFound
 }
-func (m *mockRoleRepo) Create(r Role) (*Role, error) {
+func (m *mockRoleRepo) Create(ctx context.Context, r Role) (*Role, error) {
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
-	m.roles[r.Name] = &r
+	m.roles[r.ID] = &r
 	return &r, nil
 }
-func (m *mockRoleRepo) GetByID(id string) (*Role, error) {
+func (m *mockRoleRepo) GetByID(ctx context.Context, id string) (*Role, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
-	for _, r := range m.roles {
-		if r.ID == id {
-			return r, nil
-		}
+	r, ok := m.roles[id]
+	if !ok {
+		return nil, ErrRoleNotFound
 	}
-	return nil, ErrRoleNotFound
+	return r, nil
 }
-func (m *mockRoleRepo) List() ([]Role, error) {
+func (m *mockRoleRepo) List(ctx context.Context) ([]Role, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -135,15 +127,9 @@ func (m *mockRoleRepo) List() ([]Role, error) {
 	}
 	return rs, nil
 }
-
-func (m *mockRoleRepo) Delete(id string) error {
-	for k, r := range m.roles {
-		if r.ID == id {
-			delete(m.roles, k)
-			return nil
-		}
-	}
-	return ErrRoleNotFound
+func (m *mockRoleRepo) Delete(ctx context.Context, id string) error {
+	delete(m.roles, id)
+	return nil
 }
 
 type mockHasher struct {
