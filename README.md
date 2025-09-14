@@ -1,6 +1,6 @@
 # users-core
 
-This repository contains the **core business logic** for user and role management in Go. It is designed to be framework-agnostic and easily integrated with other modules (such as HTTP handlers, database adapters, etc.) that may live in separate repositories.
+This repository provides the **core business logic** for user and role management in Go. It is designed to be framework-agnostic and easily integrated with other modules (such as HTTP handlers, database adapters, etc.) that may live in separate repositories.
 
 ---
 
@@ -19,12 +19,12 @@ This repository contains the **core business logic** for user and role managemen
 ## Structure
 
 - `service.go` — Core service logic for users and roles
-- `repository.go` — Repository interfaces for users and roles (to be implemented elsewhere)
-- `hasher.go` — Password hasher interface (to be implemented elsewhere)
 - `user.go` — User domain model
 - `role.go` — Role domain model and constants
 - `DTO.go` — Data transfer objects for user input
 - `service_test.go` — Unit tests with mocks for all service logic
+
+> **Note:** Repository and hasher interfaces are expected to be implemented in your own adapters.
 
 ---
 
@@ -50,9 +50,10 @@ svc := users.NewService(userRepo, roleRepo, hasher)
 
 You must provide implementations for:
 
-- `UserRepository` (see `repository.go`)
-- `RoleRepository` (see `repository.go`)
-- `PasswordHasher` (see `hasher.go`)
+- `UserRepository`
+- `RoleRepository`
+- `PasswordHasher`
+- `Tokenizer` (if using token-based authentication)
 
 ---
 
