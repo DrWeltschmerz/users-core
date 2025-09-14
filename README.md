@@ -1,68 +1,54 @@
 # users-core
 
-This repository provides the **core business logic** for user and role management in Go. It is designed to be framework-agnostic and easily integrated with other modules (such as HTTP handlers, database adapters, etc.) that may live in separate repositories.
-
----
+Core domain logic and interfaces for user management.
 
 ## Features
 
-- User registration and authentication
-- Password hashing and verification (pluggable)
-- Role management (create, assign, list)
-- User CRUD operations
-- Last seen tracking
-- Password change and reset
-- Error handling with domain-specific errors
-
----
-
-## Structure
-
-- `service.go` — Core service logic for users and roles
-- `user.go` — User domain model
-- `role.go` — Role domain model and constants
-- `DTO.go` — Data transfer objects for user input
-- `service_test.go` — Unit tests with mocks for all service logic
-
-> **Note:** Repository and hasher interfaces are expected to be implemented in your own adapters.
-
----
+- User and Role domain models
+- Repository interfaces (`UserRepository`, `RoleRepository`)
+- Service layer with business logic (registration, login, password change, etc.)
+- Password hashing abstraction
 
 ## Usage
 
-This module is intended to be imported by other modules (such as HTTP handlers or database adapters) that provide concrete implementations for the repository and hasher interfaces.
+This module defines the core types and interfaces for user management.  
+It does **not** provide any database implementation—see [users-adapter-gorm](https://github.com/DrWeltschmerz/users-adapter-gorm) for a GORM adapter.
 
-Example usage:
+### Example: Using the Service with a Repository
 
 ```go
-import "github.com/DrWeltschmerz/users-core"
+import (
+    "context"
+    "github.com/DrWeltschmerz/users-core"
+    gormadapter "github.com/DrWeltschmerz/users-adapter-gorm/gorm"
+    "github.com/DrWeltschmerz/jwt-auth/pkg/authjwt"
+    "gorm.io/driver/sqlite"
+    "gorm.io/gorm"
+)
 
-userRepo := NewYourUserRepo()     // your implementation
-roleRepo := NewYourRoleRepo()     // your implementation
-hasher := NewYourPasswordHasher() // your implementation
+func main() {
+    db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+    db.AutoMigrate(&gormadapter.GormUser{}, &gormadapter.GormRole{})
 
-svc := users.NewService(userRepo, roleRepo, hasher)
+    userRepo := gormadapter.NewGormUserRepository(db)
+    roleRepo := gormadapter.NewGormRoleRepository(db)
+    hasher := authjwt.NewBcryptHasher()
+
+    service := users.NewService(userRepo, roleRepo, hasher)
+
+    user, err := service.Register(context.Background(), users.UserRegisterInput{
+        Email:    "test@example.com",
+        Username: "testuser",
+        Password: "secret",
+    })
+    // ...
+}
 ```
 
----
+## Repository Interfaces
 
-## Interfaces
-
-You must provide implementations for:
-
-- `UserRepository`
-- `RoleRepository`
-- `PasswordHasher`
-- `Tokenizer` (if using token-based authentication)
-
----
-
-## Extending
-
-- Add your own adapters for persistence (e.g., Postgres, MongoDB, etc.) in separate repositories.
-- Add HTTP or gRPC handlers in separate repositories.
-
----
+The repository interfaces (`UserRepository`, `RoleRepository`) are defined in the main package files and specify the required methods for data access and persistence.  
+You can implement these interfaces to connect the service layer to any storage backend.
 
 ## Testing
 
