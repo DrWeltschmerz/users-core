@@ -1,3 +1,4 @@
+
 # users-core
 
 Core domain logic and interfaces for user management.
@@ -9,21 +10,28 @@ Core domain logic and interfaces for user management.
 - Service layer with business logic (registration, login, password change, etc.)
 - Password hashing abstraction
 
-## Usage
+## How to Use With Adapters
 
-This module defines the core types and interfaces for user management.  
-It does **not** provide any database implementation—see [users-adapter-gorm](https://github.com/DrWeltschmerz/users-adapter-gorm) for a GORM adapter.
 
-### Example: Using the Service with a Repository
+This module defines the core types, interfaces, and business logic for user management. It does **not** provide any database, HTTP, or JWT implementation.
+
+To use this module in a real application, combine it with one or more adapters and a JWT implementation:
+
+- [users-adapter-gorm](https://github.com/DrWeltschmerz/users-adapter-gorm): GORM-based repository implementations
+- [users-adapter-gin](https://github.com/DrWeltschmerz/users-adapter-gin): Gin HTTP REST API adapter
+- [jwt-auth](https://github.com/DrWeltschmerz/jwt-auth): JWT tokenizer and password hasher implementations
+
+### Example: Wiring Everything Together
 
 ```go
 import (
-    "context"
     "github.com/DrWeltschmerz/users-core"
     gormadapter "github.com/DrWeltschmerz/users-adapter-gorm/gorm"
+    ginadapter "github.com/DrWeltschmerz/users-adapter-gin/ginadapter"
     "github.com/DrWeltschmerz/jwt-auth/pkg/authjwt"
     "gorm.io/driver/sqlite"
     "gorm.io/gorm"
+    "github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -32,18 +40,20 @@ func main() {
 
     userRepo := gormadapter.NewGormUserRepository(db)
     roleRepo := gormadapter.NewGormRoleRepository(db)
+
+    // Use jwt-auth or your own implementation for hasher and tokenizer
     hasher := authjwt.NewBcryptHasher()
+    tokenizer := authjwt.NewJWTTokenizer("your-secret-key")
 
-    service := users.NewService(userRepo, roleRepo, hasher)
+    service := users.NewService(userRepo, roleRepo, hasher, tokenizer)
 
-    user, err := service.Register(context.Background(), users.UserRegisterInput{
-        Email:    "test@example.com",
-        Username: "testuser",
-        Password: "secret",
-    })
-    // ...
+    r := gin.Default()
+    ginadapter.RegisterRoutes(r, service, tokenizer)
+    r.Run()
 }
 ```
+
+See the [users-adapter-gorm](https://github.com/DrWeltschmerz/users-adapter-gorm) and [users-adapter-gin](https://github.com/DrWeltschmerz/users-adapter-gin) READMEs for details on their own APIs and extension points.
 
 ## Repository Interfaces
 
