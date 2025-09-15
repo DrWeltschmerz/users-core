@@ -2,6 +2,12 @@
 
 Core domain logic and interfaces for user management.
 
+## Install
+
+```sh
+go get github.com/DrWeltschmerz/users-core@v1.2.0
+```
+
 ## Features
 
 - User and Role domain models
@@ -19,6 +25,10 @@ To use this module in a real application, combine it with one or more adapters a
 - [users-adapter-gorm](https://github.com/DrWeltschmerz/users-adapter-gorm): GORM-based repository implementations
 - [users-adapter-gin](https://github.com/DrWeltschmerz/users-adapter-gin): Gin HTTP REST API adapter
 - [jwt-auth](https://github.com/DrWeltschmerz/jwt-auth): JWT tokenizer and password hasher implementations
+
+For an end-to-end demo and tests, see the separate tests repository:
+
+- [users-tests](https://github.com/DrWeltschmerz/users-tests): Go integration tests and Playwright API tests
 
 ### Example: Wiring Everything Together
 
@@ -69,6 +79,8 @@ Run tests with:
 ```sh
 go test ./...
 ```
+
+Or see users-tests for integration tests spanning all modules.
 
 ---
 
