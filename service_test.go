@@ -493,7 +493,6 @@ func TestChangePassword(t *testing.T) {
 		userRepo.updateErr = errors.New("fail")
 		_, err := svc.ChangePassword(ctx, "u1", "newpw", "newpw2")
 		require.Contains(t, userRepo.users, "u1")
-		t.Logf("error returned: %v", err)
 		require.ErrorIs(t, err, ErrFailedToUpdateUser)
 		userRepo.updateErr = nil
 	})

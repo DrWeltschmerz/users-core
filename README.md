@@ -1,4 +1,3 @@
-
 # users-core
 
 Core domain logic and interfaces for user management.
@@ -43,7 +42,7 @@ func main() {
 
     // Use jwt-auth or your own implementation for hasher and tokenizer
     hasher := authjwt.NewBcryptHasher()
-    tokenizer := authjwt.NewJWTTokenizer("your-secret-key")
+    tokenizer := authjwt.NewJWTTokenizer()
 
     service := users.NewService(userRepo, roleRepo, hasher, tokenizer)
 

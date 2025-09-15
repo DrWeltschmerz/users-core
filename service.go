@@ -151,14 +151,16 @@ func (s *Service) ListRoles(ctx context.Context) ([]Role, error) {
 }
 
 func (s *Service) IsAdmin(user *User) bool {
-	if user.RoleID == "" {
-		return false
-	}
+	   if user.RoleID == "" {
+		   return false
+	   }
 	role, err := s.roleRepo.GetByID(context.Background(), user.RoleID)
-	if err != nil {
-		return false
-	}
-	return role.Name == RoleAdmin
+	   if err != nil {
+		   return false
+	   }
+	isAdmin := role.Name == RoleAdmin
+		// ...existing code...
+	return isAdmin
 }
 
 func (s *Service) UpdateLastSeen(ctx context.Context, userID string) error {
@@ -182,11 +184,14 @@ func (s *Service) ChangePassword(ctx context.Context, userID, oldPassword, newPa
 		return nil, ErrUserNotFound
 	}
 
+		// ...existing code...
+
 	if oldPassword == newPassword {
 		return nil, ErrCannotUseSamePassword
 	}
 
 	if !s.hasher.Verify(user.HashedPassword, oldPassword) {
+		// ...existing code...
 		return nil, ErrInvalidCredentials
 	}
 
